@@ -1,11 +1,11 @@
-name: Android CI - Build APK
+
+name: Build Ambiorix POS APK
 
 on:
+  workflow_dispatch:
   push:
     branches: ["**"]
-    tags: ["v*"]
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,58 +13,44 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
           cache: gradle
 
-      # Do not ask setup-android to install the obsolete package named "tools".
-      # Install command-line tools via the action, then install SDK components explicitly.
-      - name: Set up Android SDK command-line tools
+      - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: ""
 
-      - name: Install Android SDK packages
+      - name: Install required SDK packages
         shell: bash
         run: |
-          set -euo pipefail
-          SDKMANAGER="${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager"
-          if [[ ! -x "$SDKMANAGER" ]]; then
-            SDKMANAGER="$(find "${ANDROID_HOME}/cmdline-tools" -type f -name sdkmanager | head -n 1)"
-          fi
-          test -n "$SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          set -e
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses || true
           "$SDKMANAGER" --install "platform-tools" "platforms;android-34"
-          "$SDKMANAGER" --list_installed
 
-      - name: Make Gradle wrapper executable
+      - name: Prepare Gradle
         run: chmod +x ./gradlew
 
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      - name: Build debug APK
+      - name: Build APK
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: Collect APK
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p dist
-          APK="$(find app/build/outputs/apk/debug -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-          test -n "$APK"
-          cp "$APK" dist/AmbiorixPOS-debug.apk
-          ls -lh dist
-
-      - name: Upload APK artifact
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: AmbiorixPOS-debug-APK
-          path: dist/*.apk
+          name: AmbiorixPOS-debug
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
